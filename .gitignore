@@ -6,6 +6,7 @@
 # Python
 *.pyc
 *.pyo
+.env
 
 # Common IDEs
 *.swp
