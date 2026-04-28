@@ -1,5 +1,5 @@
 Django>=6.0.3
 gunicorn
-whitenoite
+whitenoise
 pyscopg2-binary
 python-decouple
