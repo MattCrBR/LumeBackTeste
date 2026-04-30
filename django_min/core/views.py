@@ -156,6 +156,10 @@ def stripe_webhook(request):
     payload = request.body
     signature = request.headers.get("Stripe-Signature", "")
 
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error(f"Webhook recebido. Signature presente: {bool(signature)}. Secret configurado: {bool(settings.STRIPE_WEBHOOK_SECRET)}")
+
     if not StripeWebhookVerifier.verify(payload, signature):
         return JsonResponse({"error": "Assinatura inválida"}, status=400)
 
