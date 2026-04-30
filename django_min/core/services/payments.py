@@ -7,6 +7,7 @@ from decimal import Decimal
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import uuid4
+from django.core.mail import send_mail
 
 from django.conf import settings
 from django.db import transaction
@@ -190,7 +191,30 @@ class CheckoutService:
         pedido = pagamento.pedido
         pedido.status = Pedido.Status.PAGO
         pedido.save(update_fields=["status", "atualizado_em"])
-        return pagamento
+        
+        itens=pedido.itens.all()
+        lista_itens="\n".join(
+            [f"{item.nome_item} (x{item.quantidade})" 
+            for item in itens]
+            )
+        try:
+            send_mail(
+                subject=f"Pedido #{pedido.id} Confirmado!",
+                message=(
+                    f"Olá {pedido.usuario.get_full_name() or pedido.usuario.username},\n\n"
+                    f"Seu pedido foi confirmado com sucesso!\n"
+                    f"Valor total: R${pedido.valor_total:.2f}\n"
+                    f"Itens:\n{lista_itens}\n\n"
+                    f"Agradecemos por na Lume3D!"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[pedido.usuario.email],
+                fail_silently=True, # se o email falhar, o pagamento ainda é confirmado
+            )
+        except Exception:
+            pass
+
+        return pagamento    
 
     @staticmethod
     @transaction.atomic
