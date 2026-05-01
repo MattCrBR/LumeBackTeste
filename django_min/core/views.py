@@ -173,7 +173,7 @@ def stripe_webhook(request):
 
     event_type = event["type"]
     obj = event["data"]["object"]
-    checkout_id = obj.get("id")
+    checkout_id = obj["id"]
 
     if not checkout_id:
         return HttpResponse(status=200)
