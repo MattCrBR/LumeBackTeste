@@ -3,6 +3,8 @@ import hmac
 import json
 import time
 import threading
+import logging
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -201,6 +203,7 @@ class CheckoutService:
 
         def _enviar_email():
             try:
+                logger.error(f"Tentando enviar email para: {pedido.usuario.email}")
                 send_mail(
                     subject=f"Pedido #{pedido.id} confirmado!",
                     message=(
@@ -212,10 +215,11 @@ class CheckoutService:
                     ),
                     from_email=settings.DEFAULT_FROM_EMAIL,
                     recipient_list=[pedido.usuario.email],
-                    fail_silently=True,
+                    fail_silently=False,
                 )
-            except Exception:
-                pass
+                logger.error("Email enviado com sucesso.")
+            except Exception as e:
+                logger.error(f"Erro ao enviar email: {str(e)}")
 
         threading.Thread(target=_enviar_email).start()
 
