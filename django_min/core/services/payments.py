@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import time
+import threading
 from dataclasses import dataclass
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -178,43 +179,47 @@ class CheckoutService:
         carrinho.itens.all().delete()
         return pagamento
 
-    @staticmethod
-    @transaction.atomic
-    def confirmar_pagamento(checkout_id: str):
-        pagamento = Pagamento.objects.select_for_update().select_related("pedido").get(checkout_id=checkout_id)
-        if pagamento.status == Pagamento.Status.APROVADO:
-            return pagamento
+@staticmethod
+@transaction.atomic
+def confirmar_pagamento(checkout_id: str):
+    pagamento = Pagamento.objects.select_for_update().select_related("pedido").get(checkout_id=checkout_id)
+    if pagamento.status == Pagamento.Status.APROVADO:
+        return pagamento
 
-        pagamento.status = Pagamento.Status.APROVADO
-        pagamento.save(update_fields=["status", "atualizado_em"])
+    pagamento.status = Pagamento.Status.APROVADO
+    pagamento.save(update_fields=["status", "atualizado_em"])
 
-        pedido = pagamento.pedido
-        pedido.status = Pedido.Status.PAGO
-        pedido.save(update_fields=["status", "atualizado_em"])
-        
-        itens=pedido.itens.all()
-        lista_itens="\n".join(
-            [f"{item.nome_item} (x{item.quantidade})" 
-            for item in itens]
-            )
+    pedido = pagamento.pedido
+    pedido.status = Pedido.Status.PAGO
+    pedido.save(update_fields=["status", "atualizado_em"])
+
+    itens = pedido.itens.all()
+    lista_itens = "\n".join(
+        f"- {item.nome_item} x{item.quantidade} — R$ {item.preco_unitario}"
+        for item in itens
+    )
+
+    def _enviar_email():
         try:
             send_mail(
-                subject=f"Pedido #{pedido.id} Confirmado!",
+                subject=f"Pedido #{pedido.id} confirmado!",
                 message=(
-                    f"Olá {pedido.usuario.get_full_name() or pedido.usuario.username},\n\n"
-                    f"Seu pedido foi confirmado com sucesso!\n"
-                    f"Valor total: R${pedido.valor_total:.2f}\n"
+                    f"Olá, {pedido.usuario.get_full_name() or pedido.usuario.username}!\n\n"
+                    f"Seu pedido foi confirmado com sucesso.\n\n"
                     f"Itens:\n{lista_itens}\n\n"
-                    f"Agradecemos por na Lume3D!"
+                    f"Total: R$ {pedido.valor_total}\n\n"
+                    f"Obrigado por comprar na Lume!"
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[pedido.usuario.email],
-                fail_silently=True, # se o email falhar, o pagamento ainda é confirmado
+                fail_silently=True,
             )
         except Exception:
             pass
 
-        return pagamento    
+    threading.Thread(target=_enviar_email).start()
+
+    return pagamento    
 
     @staticmethod
     @transaction.atomic
