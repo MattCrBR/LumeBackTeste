@@ -1,4 +1,5 @@
 import json
+import stripe
 
 from django.conf import settings
 from django.contrib import messages
@@ -155,22 +156,24 @@ def checkout_placeholder(request, session_id):
 @require_http_methods(["POST"])
 def stripe_webhook(request):
     payload = request.body
-    signature = request.headers.get("Stripe-Signature", "")
+    sig_header = request.headers.get("Stripe-Signature")
+    endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
 
     import logging
     logger = logging.getLogger(__name__)
-    logger.error(f"Webhook recebido. Signature presente: {bool(signature)}. Secret configurado: {bool(settings.STRIPE_WEBHOOK_SECRET)}")
-
-    if not StripeWebhookVerifier.verify(payload, signature):
-        return JsonResponse({"error": "Assinatura inválida"}, status=400)
+    logger.error(f"Webhook recebido. Signature presente: {bool(sig_header)}. Secret configurado: {bool(endpoint_secret)}")
 
     try:
-        event = json.loads(payload.decode("utf-8"))
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Payload inválido"}, status=400)
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+    except ValueError:
+        return HttpResponse(status=400)
+    except stripe.error.SignatureVerificationError:
+        return HttpResponse(status=400)
 
-    event_type = event.get("type")
-    obj = event.get("data", {}).get("object", {})
+    event_type = event["type"]
+    obj = event["data"]["object"]
     checkout_id = obj.get("id")
 
     if not checkout_id:
@@ -179,8 +182,13 @@ def stripe_webhook(request):
     try:
         if event_type == "checkout.session.completed":
             CheckoutService.confirmar_pagamento(checkout_id)
-        elif event_type in {"checkout.session.expired", "checkout.session.async_payment_failed"}:
+
+        elif event_type in [
+            "checkout.session.expired",
+            "checkout.session.async_payment_failed",
+        ]:
             CheckoutService.cancelar_pagamento(checkout_id)
+
     except Pagamento.DoesNotExist:
         return HttpResponse(status=200)
 
