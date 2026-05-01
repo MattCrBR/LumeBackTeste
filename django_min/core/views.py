@@ -15,7 +15,6 @@ from .forms import LoginUsuarioForm, RegistroUsuarioForm
 from .models import ItemCatalogo, Pagamento
 from .services import CartService, CheckoutService, catalog_tables_ready
 from .services.cart import CartError, StockError
-from .services.payments import StripeWebhookVerifier
 
 
 @require_http_methods(["GET"])
